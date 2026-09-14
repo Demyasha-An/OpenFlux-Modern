@@ -38,6 +38,9 @@ esac
 if [ -n "${MTU:-}" ]; then
   set -- "$@" --mtu "$MTU"
 fi
+if [ -n "${RESOLVE:-}" ]; then
+  set -- "$@" --resolve "$RESOLVE"
+fi
 
 if [ "$role" = client ]; then
   set -- "$@" --socks5 "$listen"

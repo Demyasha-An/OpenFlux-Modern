@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -97,6 +98,47 @@ const volgaUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) 
 
 var reClientConfig = regexp.MustCompile(`<script[^>]*id="client-config"[^>]*>(.*?)</script>`)
 
+// staticHosts is an optional hostname->IP override (curl --resolve style)
+// for networks where the system DNS is poisoned and TCP/853 DoT is blocked.
+// When volga.yandex.ru / push.yandex.ru can't be resolved at all, the whole
+// transport deadlocks: relay POSTs queue up, WS can't dial, and even DoT
+// queries loop back into the (dead) tunnel. Set via SetStaticHosts before
+// Start; TLS SNI still uses the original hostname.
+var (
+	staticHostsMu sync.RWMutex
+	staticHosts   = map[string]string{}
+)
+
+// SetStaticHosts installs hostname->IP overrides. Pass nil/empty to clear.
+func SetStaticHosts(m map[string]string) {
+	staticHostsMu.Lock()
+	defer staticHostsMu.Unlock()
+	staticHosts = map[string]string{}
+	for h, ip := range m {
+		if h != "" && ip != "" {
+			staticHosts[h] = ip
+		}
+	}
+}
+
+// volgaDialContext is an http.Transport/websocket dialer that rewrites
+// known hosts to static IPs without touching TLS ServerName (it stays
+// derived from the request URL host).
+func volgaDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	if host, port, err := net.SplitHostPort(addr); err == nil {
+		staticHostsMu.RLock()
+		ip, ok := staticHosts[host]
+		staticHostsMu.RUnlock()
+		if ok {
+			addr = net.JoinHostPort(ip, port)
+		}
+	}
+	return (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext(ctx, network, addr)
+}
+
 var (
 	b64BufPool = sync.Pool{
 		New: func() interface{} { return make([]byte, 0, 16*1024*1024) },
@@ -172,6 +214,9 @@ func authorize(docURL string) (*volgaAuth, error) {
 	session := &http.Client{
 		Jar: jar,
 		Transport: &http.Transport{
+			// Static --resolve overrides must apply here too: on censored
+			// mobile networks the system DNS itself is dead.
+			DialContext:         volgaDialContext,
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 100,
 			IdleConnTimeout:     90 * time.Second,
@@ -495,6 +540,7 @@ func (r *relayClient) setAuth(a *volgaAuth) {
 
 func newRelayClient(auth *volgaAuth, cfg VolgaConfig, stats *VolgaStats) *relayClient {
 	tr := &http.Transport{
+		DialContext:         volgaDialContext,
 		MaxIdleConns:        cfg.MaxIdleConns,
 		MaxIdleConnsPerHost: cfg.MaxIdleConnsPerHost,
 		IdleConnTimeout:     cfg.IdleConnTimeout,
@@ -877,6 +923,7 @@ func (w *wsListener) connect() error {
 		HandshakeTimeout: w.config.WSHandshakeTimeout,
 		ReadBufferSize:   4 << 20,
 		WriteBufferSize:  4 << 20,
+		NetDialContext:   volgaDialContext,
 	}
 
 	conn, _, err := dialer.Dial(wsURL, header)

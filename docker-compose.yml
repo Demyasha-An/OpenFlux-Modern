@@ -28,6 +28,7 @@ services:
       SOCKS5_LISTEN: ${SOCKS5_LISTEN:-:1080}
       MOBILE: ${MOBILE:-0}
       MTU: ${MTU:-}
+      RESOLVE: ${RESOLVE:-}
       DEBUG: ${DEBUG:-0}
     # No auth on the SOCKS5 server — keep it bound to the host loopback only.
     ports:

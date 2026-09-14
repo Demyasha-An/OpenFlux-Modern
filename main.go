@@ -36,6 +36,7 @@ func main() {
 	mode := flag.String("mode", "proxy", "Exit-node mode: proxy (default, works everywhere) or raw (Linux only, needs root)")
 	mobile := flag.Bool("mobile", false, "Mobile/4G profile: light relay workers+queues, small TCP buffers, DoT resolver (client side)")
 	mtu := flag.Uint("mtu", 1500, "Virtual NIC MTU (1280-9000). Lower to 1380 on LTE/GTP paths with PMTU blackholes")
+	resolve := flag.String("resolve", "", "Static hostname->IP overrides, curl --resolve style: \"host=ip,host=ip\". For networks with dead system DNS and blocked DoT (e.g. --resolve volga.yandex.ru=IP,push.yandex.ru=IP). Applies to vyandex.")
 	flag.StringVar(&globalDocUrl, "url", "http://#", "Document URL. If u use Yandex.Docs transport")
 	flag.StringVar(&maxToken, "maxToken", "", "MAX Web token. If u use MAX transport")
 	flag.StringVar(&maxUid, "maxUid", "", "MAX call user id. If u use MAX transport")
@@ -91,6 +92,17 @@ func main() {
 
 	config := transport.DefaultConfig()
 	var inner transport.Transport
+
+	if *resolve != "" {
+		staticHosts := map[string]string{}
+		for _, pair := range strings.Split(*resolve, ",") {
+			if host, ip, ok := strings.Cut(strings.TrimSpace(pair), "="); ok {
+				staticHosts[strings.TrimSpace(host)] = strings.TrimSpace(ip)
+			}
+		}
+		yandex.SetStaticHosts(staticHosts)
+		log.Printf("Static hosts: %d override(s)", len(staticHosts))
+	}
 
 	switch *transportType {
 	case "vyandex":
