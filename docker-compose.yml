@@ -26,6 +26,8 @@ services:
       MAX_TOKEN: ${MAX_TOKEN:-}
       MAX_UID: ${MAX_UID:-}
       SOCKS5_LISTEN: ${SOCKS5_LISTEN:-:1080}
+      MOBILE: ${MOBILE:-0}
+      MTU: ${MTU:-}
       DEBUG: ${DEBUG:-0}
     # No auth on the SOCKS5 server — keep it bound to the host loopback only.
     ports:
@@ -43,6 +45,8 @@ services:
       MAX_TOKEN: ${MAX_TOKEN:-}
       MAX_UID: ${MAX_UID:-}
       LOCAL_IP: ${EXIT_LOCAL_IP:-}
+      MOBILE: ${MOBILE:-0}
+      MTU: ${MTU:-}
       DEBUG: ${DEBUG:-0}
     cap_add:
       - NET_RAW

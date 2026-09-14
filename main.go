@@ -34,6 +34,8 @@ func main() {
 	socksAddr := flag.String("socks5", ":1080", "SOCKS5 address")
 	transportType := flag.String("transport", "yandex", "Transport type (yandex, vyandex, oneme, cupsonline)")
 	mode := flag.String("mode", "proxy", "Exit-node mode: proxy (default, works everywhere) or raw (Linux only, needs root)")
+	mobile := flag.Bool("mobile", false, "Mobile/4G profile: light relay workers+queues, small TCP buffers, DoT resolver (client side)")
+	mtu := flag.Uint("mtu", 1500, "Virtual NIC MTU (1280-9000). Lower to 1380 on LTE/GTP paths with PMTU blackholes")
 	flag.StringVar(&globalDocUrl, "url", "http://#", "Document URL. If u use Yandex.Docs transport")
 	flag.StringVar(&maxToken, "maxToken", "", "MAX Web token. If u use MAX transport")
 	flag.StringVar(&maxUid, "maxUid", "", "MAX call user id. If u use MAX transport")
@@ -70,8 +72,21 @@ func main() {
 	log.Printf("=== Universal Bypass Tool ===")
 	log.Printf("Mode: %s", map[bool]string{true: "EXIT NODE", false: "CLIENT"}[*exitNode])
 	log.Printf("Transport: %s", *transportType)
+	if *mobile {
+		log.Printf("Profile: mobile")
+	}
 	if *exitNode {
 		log.Printf("Exit mode: %s", exitMode.String())
+	}
+	if *mtu != 1500 {
+		tunnel.SetMTU(uint32(*mtu))
+		log.Printf("MTU: %d", *mtu)
+	}
+	if *mobile && *client {
+		// Phone radio links: small buffers (see tunnel.UseMobileBuffers)
+		// and poison-resistant DNS (same DoT list as the iOS bridge).
+		tunnel.UseMobileBuffers()
+		EnableSecureDNS()
 	}
 
 	config := transport.DefaultConfig()
@@ -79,7 +94,11 @@ func main() {
 
 	switch *transportType {
 	case "vyandex":
-		inner = yandex.NewYandexVolgaTransport(globalDocUrl, config)
+		vt := yandex.NewYandexVolgaTransport(globalDocUrl, config)
+		if *mobile {
+			vt.SetVolgaConfig(yandex.MobileVolgaConfig())
+		}
+		inner = vt
 	case "yandex":
 		inner = yandex.NewYandexDocsTransport(globalDocUrl, config)
 	case "oneme":

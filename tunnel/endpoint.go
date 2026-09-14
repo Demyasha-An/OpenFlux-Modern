@@ -24,6 +24,20 @@ func NewTunnelLinkEndpoint() *TunnelLinkEndpoint {
 	return &TunnelLinkEndpoint{}
 }
 
+// tunnelMTU defaults to 1500 (Ethernet). On LTE/GTP paths the effective
+// MTU is smaller and there is no MSS clamp anywhere, so big TLS records
+// can blackhole while small SYNs pass ("traffic flows, no internet").
+// Lower via SetMTU (e.g. 1380) --mobile-style networks.
+var tunnelMTU uint32 = 1500
+
+// SetMTU overrides the virtual NIC MTU. Must be called before the stack
+// creates the NIC (i.e. before NewTCPTunnelMode).
+func SetMTU(mtu uint32) {
+	if mtu >= 1280 && mtu <= 9000 {
+		tunnelMTU = mtu
+	}
+}
+
 func (e *TunnelLinkEndpoint) InjectInbound(data []byte) {
 	e.packetIn.Add(1)
 	utils.Debugf("<- %d bytes - %s\n", len(data), network.ParsePacketInfo(data))
@@ -47,7 +61,7 @@ func (e *TunnelLinkEndpoint) WritePackets(pkts stack.PacketBufferList) (int, tcp
 	return n, nil
 }
 
-func (e *TunnelLinkEndpoint) MTU() uint32                                 { return 1500 }
+func (e *TunnelLinkEndpoint) MTU() uint32                                 { return tunnelMTU }
 func (e *TunnelLinkEndpoint) MaxHeaderLength() uint16                      { return 0 }
 func (e *TunnelLinkEndpoint) LinkAddress() tcpip.LinkAddress               { return "\x02\x00\x00\x00\x00\x01" }
 func (e *TunnelLinkEndpoint) Capabilities() stack.LinkEndpointCapabilities { return stack.CapabilityNone }

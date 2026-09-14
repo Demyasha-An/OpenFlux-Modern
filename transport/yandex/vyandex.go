@@ -76,6 +76,23 @@ func DefaultVolgaConfig() VolgaConfig {
 	}
 }
 
+// MobileVolgaConfig is a low-footprint variant of DefaultVolgaConfig for
+// phones and 4G: 32 relay workers instead of 2000, a bounded queue, smaller
+// batches and shorter relay timeout so a degraded radio link fails fast
+// instead of piling up megabytes in memory.
+func MobileVolgaConfig() VolgaConfig {
+	cfg := DefaultVolgaConfig()
+	cfg.MaxIdleConnsPerHost = 32
+	cfg.MaxIdleConns = 64
+	cfg.RelayTimeout = 15 * time.Second
+	cfg.WorkerCount = 32
+	cfg.QueueSize = 8192
+	cfg.BatchSize = 10
+	cfg.BatchTimeout = 5 * time.Millisecond
+	cfg.BatchMaxBytes = 1 * 1024 * 1024
+	return cfg
+}
+
 const volgaUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) Gecko/20100101 Firefox/153.0"
 
 var reClientConfig = regexp.MustCompile(`<script[^>]*id="client-config"[^>]*>(.*?)</script>`)
@@ -118,6 +135,19 @@ type VolgaStats struct {
 	WorkerBusy     atomic.Int64
 	BatchesSent    atomic.Uint64
 	PacketsBatched atomic.Uint64
+	Reauths        atomic.Uint64
+	AuthFailures   atomic.Uint64
+}
+
+// isVolgaAuthError reports whether a relay error looks like an expired
+// session (Bearer/sign/cookies/request-path no longer accepted).
+// Such errors require re-authorize, not plain WS backoff.
+func isVolgaAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "status 401") || strings.Contains(s, "status 403")
 }
 
 type volgaAuth struct {
@@ -423,6 +453,7 @@ func minInt(a, b int) int {
 
 type relayClient struct {
 	auth   *volgaAuth
+	authMu sync.RWMutex
 	config VolgaConfig
 	stats  *VolgaStats
 
@@ -434,12 +465,32 @@ type relayClient struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 
+	// onAuthError is called for every failed batch so the owner
+	// (YandexVolgaTransport) can count 401/403 and trigger re-authorize.
+	onAuthError func(err error)
+
 	bundleID atomic.Uint64
 	seq      atomic.Uint64
 	localID  atomic.Uint64
 
 	mu       sync.Mutex
 	frontier string
+}
+
+func (r *relayClient) getAuth() *volgaAuth {
+	r.authMu.RLock()
+	defer r.authMu.RUnlock()
+	return r.auth
+}
+
+func (r *relayClient) setAuth(a *volgaAuth) {
+	r.authMu.Lock()
+	r.auth = a
+	r.authMu.Unlock()
+	// NOTE: r.httpClient.Jar is intentionally NOT swapped here: relay POSTs
+	// carry Cookie/Auth headers explicitly from getAuth(), and swapping Jar
+	// concurrently with in-flight Do() would race. Jar only matters during
+	// authorize(), which builds its own session client.
 }
 
 func newRelayClient(auth *volgaAuth, cfg VolgaConfig, stats *VolgaStats) *relayClient {
@@ -526,9 +577,15 @@ func (r *relayClient) worker(id int) {
 		if err != nil {
 			r.stats.HTTPReqsFailed.Add(1)
 			utils.Debugf("[VOLGA] batch send failed: %v", err)
+			if cb := r.onAuthError; cb != nil {
+				cb(err)
+			}
 		} else {
 			r.stats.HTTPReqsSent.Add(1)
 			r.stats.BatchesSent.Add(1)
+			if cb := r.onAuthError; cb != nil {
+				cb(nil)
+			}
 		}
 		r.stats.WorkerBusy.Add(-1)
 		batch = batch[:0]
@@ -577,9 +634,13 @@ func (r *relayClient) sendBatch(batch [][]byte) error {
 	encoded := base64Encode(blob.Bytes())
 	blobBufPool.Put(blob)
 
+	auth := r.getAuth()
+	if auth == nil {
+		return fmt.Errorf("no auth (reauthorizing?)")
+	}
 	frontier := r.getFrontier()
-	opID := fmt.Sprintf("1-%d.%d", r.auth.UserID, r.seq.Add(1))
-	relayOpID := fmt.Sprintf("1-%d.%d", r.auth.UserID, r.seq.Add(1))
+	opID := fmt.Sprintf("1-%d.%d", auth.UserID, r.seq.Add(1))
+	relayOpID := fmt.Sprintf("1-%d.%d", auth.UserID, r.seq.Add(1))
 
 	bundle := []interface{}{
 		map[string]interface{}{
@@ -597,7 +658,7 @@ func (r *relayClient) sendBatch(batch [][]byte) error {
 			"undoable":   false,
 			"actionName": "setCaret",
 			"ops": []interface{}{
-				[]interface{}{"us", r.auth.UserID, []interface{}{
+				[]interface{}{"us", auth.UserID, []interface{}{
 					[]interface{}{
 						[]interface{}{"vyd:t/00000000000008", 0, -1},
 						[]interface{}{"vyd:t/00000000000008", 0, -1},
@@ -630,16 +691,16 @@ func (r *relayClient) sendBatch(batch [][]byte) error {
 	copy(bodyCopy, buf.Bytes())
 	jsonBufPool.Put(buf)
 
-	urlStr := fmt.Sprintf("https://volga.yandex.ru/session/main/%s/relay", r.auth.RequestPath)
+	urlStr := fmt.Sprintf("https://volga.yandex.ru/session/main/%s/relay", auth.RequestPath)
 	req, err := http.NewRequestWithContext(r.ctx, "POST", urlStr, bytes.NewReader(bodyCopy))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("User-Agent", volgaUserAgent)
-	req.Header.Set("Authorization", "Bearer "+r.auth.Token)
+	req.Header.Set("Authorization", "Bearer "+auth.Token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "https://volga.yandex.ru")
-	req.Header.Set("Referer", "https://volga.yandex.ru/document/?request-path="+r.auth.RequestPath)
+	req.Header.Set("Referer", "https://volga.yandex.ru/document/?request-path="+auth.RequestPath)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Sec-Fetch-Dest", "empty")
 	req.Header.Set("Sec-Fetch-Mode", "cors")
@@ -647,7 +708,7 @@ func (r *relayClient) sendBatch(batch [][]byte) error {
 	req.ContentLength = int64(len(bodyCopy))
 
 	var cookieParts []string
-	for _, c := range r.auth.Cookies {
+	for _, c := range auth.Cookies {
 		cookieParts = append(cookieParts, c.Name+"="+c.Value)
 	}
 	if len(cookieParts) > 0 {
@@ -677,6 +738,12 @@ func (r *relayClient) SetFrontier(opID string) {
 	r.mu.Unlock()
 }
 
+func (r *relayClient) resetFrontier() {
+	r.mu.Lock()
+	r.frontier = ""
+	r.mu.Unlock()
+}
+
 func (r *relayClient) getFrontier() []interface{} {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -688,13 +755,30 @@ func (r *relayClient) getFrontier() []interface{} {
 
 type wsListener struct {
 	auth   *volgaAuth
+	authMu sync.RWMutex
 	config VolgaConfig
 	stats  *VolgaStats
 	relay  *relayClient
 	onData func([]byte)
 
+	// onState mirrors the downlink state to the owner so
+	// IsConnected() stops lying when WS is dead but relay POSTs 200.
+	onState func(connected bool)
+
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+func (w *wsListener) getAuth() *volgaAuth {
+	w.authMu.RLock()
+	defer w.authMu.RUnlock()
+	return w.auth
+}
+
+func (w *wsListener) setAuth(a *volgaAuth) {
+	w.authMu.Lock()
+	w.auth = a
+	w.authMu.Unlock()
 }
 
 func newWSListener(auth *volgaAuth, cfg VolgaConfig, stats *VolgaStats,
@@ -730,15 +814,27 @@ func (w *wsListener) run() {
 		default:
 		}
 
-		if err := w.connect(); err != nil {
+		start := time.Now()
+		err := w.connect()
+		lived := time.Since(start)
+		if err != nil {
 			utils.Debugf("[VOLGA] WS error: %v", err)
+		}
+		if w.onState != nil {
+			w.onState(false)
 		}
 		if w.ctx.Err() != nil {
 			return
 		}
 
 		w.stats.WSReconnects.Add(1)
-		utils.Debugf("[VOLGA] WS reconnect in %v", delay)
+		// A long-lived session means the network is fine: do not let
+		// backoff saturate at 30s after normal reconnects (mobile NAT
+		// flaps would otherwise stall the downlink for minutes).
+		if lived > 15*time.Second {
+			delay = w.config.ReconnectMinDelay
+		}
+		utils.Debugf("[VOLGA] WS reconnect in %v (lived %v)", delay, lived.Round(time.Second))
 		select {
 		case <-time.After(delay):
 		case <-w.ctx.Done():
@@ -753,14 +849,18 @@ func (w *wsListener) run() {
 }
 
 func (w *wsListener) connect() error {
+	auth := w.getAuth()
+	if auth == nil {
+		return fmt.Errorf("no auth (reauthorizing?)")
+	}
 	wsURL := "wss://push.yandex.ru/v2/subscribe/websocket?" +
 		"service=volga" +
-		"&user=" + url.QueryEscape(w.auth.UserIDStr) +
-		"&sign=" + w.auth.Sign +
-		"&ts=" + w.auth.TS +
+		"&user=" + url.QueryEscape(auth.UserIDStr) +
+		"&sign=" + auth.Sign +
+		"&ts=" + auth.TS +
 		"&client=web" +
-		"&session=" + w.auth.SessionID +
-		"&fetch_history=" + url.QueryEscape(w.auth.UserIDStr+":volga:0:1") +
+		"&session=" + auth.SessionID +
+		"&fetch_history=" + url.QueryEscape(auth.UserIDStr+":volga:0:1") +
 		"&x_request_attempt=0"
 
 	header := http.Header{}
@@ -768,7 +868,7 @@ func (w *wsListener) connect() error {
 	header.Set("Origin", "https://volga.yandex.ru")
 
 	var cookieParts []string
-	for _, c := range w.auth.Cookies {
+	for _, c := range auth.Cookies {
 		cookieParts = append(cookieParts, c.Name+"="+c.Value)
 	}
 	header.Set("Cookie", strings.Join(cookieParts, "; "))
@@ -785,7 +885,10 @@ func (w *wsListener) connect() error {
 	}
 	defer conn.Close()
 
-	utils.Debugf("[VOLGA] WS connected: user=%s", w.auth.UserIDStr)
+	utils.Debugf("[VOLGA] WS connected: user=%s", auth.UserIDStr)
+	if w.onState != nil {
+		w.onState(true)
+	}
 
 	for {
 		select {
@@ -833,7 +936,7 @@ func (w *wsListener) handleMessage(raw []byte) {
 		return
 	}
 
-	if inner.UserID == w.auth.UserID {
+	if auth := w.getAuth(); auth != nil && inner.UserID == auth.UserID {
 		return
 	}
 
@@ -936,6 +1039,9 @@ type YandexVolgaTransport struct {
 	onDataMu sync.RWMutex
 	onData   func([]byte)
 
+	reauthMu      sync.Mutex
+	authFailCount atomic.Int32
+
 	keepAliveStop chan struct{}
 }
 
@@ -947,6 +1053,12 @@ func NewYandexVolgaTransport(docURL string, cfg transport.TransportConfig) *Yand
 		stats:         &VolgaStats{},
 		keepAliveStop: make(chan struct{}),
 	}
+}
+
+// SetVolgaConfig overrides the relay/WS tuning. Must be called before
+// Start (Start builds relay+WS from t.config). Used by --mobile.
+func (t *YandexVolgaTransport) SetVolgaConfig(cfg VolgaConfig) {
+	t.config = cfg
 }
 
 func (t *YandexVolgaTransport) Start() error {
@@ -962,6 +1074,7 @@ func (t *YandexVolgaTransport) Start() error {
 	t.auth = auth
 
 	t.relay = newRelayClient(auth, t.config, t.stats)
+	t.relay.onAuthError = t.handleRelayError
 	t.relay.Start()
 
 	t.ws = newWSListener(auth, t.config, t.stats, t.relay, func(data []byte) {
@@ -973,6 +1086,9 @@ func (t *YandexVolgaTransport) Start() error {
 		}
 		t.RecordReceive(len(data))
 	})
+	t.ws.onState = func(connected bool) {
+		t.SetConnected(connected)
+	}
 	t.ws.Start()
 
 	go t.keepAliveLoop()
@@ -982,6 +1098,60 @@ func (t *YandexVolgaTransport) Start() error {
 	utils.Debugf("[VOLGA] transport started: user=%d(%s) rp=%s",
 		auth.UserID, auth.UserIDStr, auth.RequestPath)
 	return nil
+}
+
+// handleRelayError counts consecutive 401/403 relay failures and kicks off
+// a single re-authorize. Non-auth errors just reset the counter on success
+// path (see below) and are handled by normal WS backoff.
+func (t *YandexVolgaTransport) handleRelayError(err error) {
+	if err == nil || !isVolgaAuthError(err) {
+		// Any success or non-auth failure breaks the consecutive streak.
+		t.authFailCount.Store(0)
+		return
+	}
+	t.stats.AuthFailures.Add(1)
+	n := t.authFailCount.Add(1)
+	utils.Debugf("[VOLGA] auth failure %d/5: %v", n, err)
+	if n < 5 {
+		return
+	}
+	// Only one reauthorize at a time; extra failures while it runs are ignored.
+	go t.reauthorize()
+}
+
+// reauthorize fetches a fresh session and hot-swaps it into relay+WS
+// without dropping the queues. Called async from handleRelayError.
+func (t *YandexVolgaTransport) reauthorize() {
+	if !t.reauthMu.TryLock() {
+		return
+	}
+	defer t.reauthMu.Unlock()
+
+	if !t.IsRunning() {
+		return
+	}
+	utils.Debugf("[VOLGA] reauthorizing...")
+	auth, err := authorize(t.docURL)
+	if err != nil {
+		utils.Debugf("[VOLGA] reauthorize failed: %v", err)
+		t.SetConnected(false)
+		// Let the next batch of 401/403 retry later.
+		t.authFailCount.Store(0)
+		return
+	}
+	t.auth = auth
+	if t.relay != nil {
+		t.relay.setAuth(auth)
+		t.relay.resetFrontier()
+	}
+	if t.ws != nil {
+		t.ws.setAuth(auth)
+	}
+	t.authFailCount.Store(0)
+	t.stats.Reauths.Add(1)
+	t.SetConnected(true)
+	utils.Debugf("[VOLGA] reauthorized: user=%d(%s) rp=%s",
+		auth.UserID, auth.UserIDStr, auth.RequestPath)
 }
 
 func (t *YandexVolgaTransport) Stop() error {
@@ -1067,13 +1237,14 @@ func (t *YandexVolgaTransport) statsLoop() {
 			batches := t.stats.BatchesSent.Load()
 			batched := t.stats.PacketsBatched.Load()
 
-			utils.Debugf("[VOLGA-STATS] send %d pkt/s (%d KB/s) | http %d req/s fail %d | batch %d (avg %.1f pkt) | recv %d pkt/s (%d KB/s) | busy %d/%d",
+			utils.Debugf("[VOLGA-STATS] send %d pkt/s (%d KB/s) | http %d req/s fail %d | batch %d (avg %.1f pkt) | recv %d pkt/s (%d KB/s) | busy %d/%d | reauth %d authfail %d",
 				(sent-lastSent)/5, (bytes-lastBytes)/5/1024,
 				(httpReqs-lastHTTP)/5, failed-lastFailed,
 				(batches-lastBatches)/5,
 				float64(batched-lastBatched)/float64(maxU64(batches-lastBatches, 1)),
 				(recv-lastRecv)/5, (recvBytes-lastRecvBytes)/5/1024,
-				t.stats.WorkerBusy.Load(), t.config.WorkerCount)
+				t.stats.WorkerBusy.Load(), t.config.WorkerCount,
+				t.stats.Reauths.Load(), t.stats.AuthFailures.Load())
 
 			lastSent, lastBytes = sent, bytes
 			lastHTTP, lastFailed = httpReqs, failed

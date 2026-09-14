@@ -64,6 +64,15 @@ var (
 	TCPBufMax     = 64 * 1024 * 1024
 )
 
+// UseMobileBuffers shrinks the gVisor TCP buffer range for phones and 4G.
+// 16MB sockets on a lossy radio link mean bufferbloat: huge in-flight,
+// long retransmits, OOM on small devices. Call before NewTCPTunnelMode.
+func UseMobileBuffers() {
+	TCPBufMin = 256 * 1024
+	TCPBufDefault = 1024 * 1024
+	TCPBufMax = 4 * 1024 * 1024
+}
+
 // SetTCPBuffers applies the configured TCP send/receive buffer ranges to s.
 func SetTCPBuffers(s *stack.Stack) {
 	rcv := tcpip.TCPReceiveBufferSizeRangeOption{Min: TCPBufMin, Default: TCPBufDefault, Max: TCPBufMax}
