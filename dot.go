@@ -8,7 +8,7 @@ import (
 	"net"
 	"time"
 
-	"universal-bypass-tool/utils"
+	"openflux/utils"
 )
 
 // Secure DNS-over-TLS resolver for censored / poisoned mobile networks.
