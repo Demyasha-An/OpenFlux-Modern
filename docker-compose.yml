@@ -29,6 +29,8 @@ services:
       MOBILE: ${MOBILE:-0}
       MTU: ${MTU:-}
       RESOLVE: ${RESOLVE:-}
+      MODE: ${MODE:-}
+      CODEC: ${CODEC:-}
       DEBUG: ${DEBUG:-0}
     # No auth on the SOCKS5 server — keep it bound to the host loopback only.
     ports:
@@ -48,6 +50,8 @@ services:
       LOCAL_IP: ${EXIT_LOCAL_IP:-}
       MOBILE: ${MOBILE:-0}
       MTU: ${MTU:-}
+      MODE: ${MODE:-l4}
+      CODEC: ${CODEC:-}
       DEBUG: ${DEBUG:-0}
     cap_add:
       - NET_RAW

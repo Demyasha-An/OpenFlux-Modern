@@ -22,9 +22,31 @@ case "$role" in
 esac
 
 case "$transport" in
-  yandex|vyandex|oneme|cupsonline) ;;
+  yandex|vyandex|oneme|cupsonline|mailru) ;;
   *)
-    echo "TRANSPORT must be one of yandex, vyandex, oneme, cupsonline (got '$transport')" >&2
+    echo "TRANSPORT must be one of yandex, vyandex, oneme, cupsonline, mailru (got '$transport')" >&2
+    exit 2
+    ;;
+esac
+
+# Exit-node mode: l4 (gVisor proxy, default) or l3 (raw SNAT/DNAT, Linux+NET_RAW).
+case "${MODE:-}" in
+  "") ;;
+  l3|l4) set -- "$@" --mode "$MODE" ;;
+  *)
+    echo "MODE must be 'l3' or 'l4' (got '$MODE')" >&2
+    exit 2
+    ;;
+esac
+
+# App-layer codec: batched (zstd, default) or legacy (per-packet LZ4).
+# MUST match the peer: an old Termux/pre-merge client speaks legacy, so a
+# server paired with it must run CODEC=legacy until the client is rebuilt.
+case "${CODEC:-}" in
+  "") ;;
+  batched|legacy) set -- "$@" --codec "$CODEC" ;;
+  *)
+    echo "CODEC must be 'batched' or 'legacy' (got '$CODEC')" >&2
     exit 2
     ;;
 esac
