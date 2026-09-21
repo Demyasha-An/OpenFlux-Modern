@@ -84,6 +84,7 @@ func (b *BatchedTransport) Send(data []byte) error {
 	case b.queue <- p:
 		return nil
 	default:
+		utils.Debugf("[BATCH] queue full, dropping packet (%d bytes); TCP will retransmit", len(p))
 		return fmt.Errorf("batch queue full")
 	}
 }
@@ -127,7 +128,7 @@ func (b *BatchedTransport) flushLoop() {
 			select {
 			case p, ok := <-b.queue:
 				if !ok {
-					b.Transport.Send(encodeBatch(batch))
+					b.sendBatch(batch)
 					return
 				}
 				batch = append(batch, p)
@@ -148,7 +149,7 @@ func (b *BatchedTransport) flushLoop() {
 				case p, ok := <-b.queue:
 					if !ok {
 						timer.Stop()
-						b.Transport.Send(encodeBatch(batch))
+						b.sendBatch(batch)
 						return
 					}
 					batch = append(batch, p)
@@ -160,6 +161,14 @@ func (b *BatchedTransport) flushLoop() {
 			timer.Stop()
 		}
 
-		b.Transport.Send(encodeBatch(batch))
+		b.sendBatch(batch)
+	}
+}
+
+// sendBatch encodes and forwards a batch, skipping the send when every
+// packet was dropped as oversized (encodeBatch returned nil).
+func (b *BatchedTransport) sendBatch(batch [][]byte) {
+	if out := encodeBatch(batch); out != nil {
+		b.Transport.Send(out)
 	}
 }

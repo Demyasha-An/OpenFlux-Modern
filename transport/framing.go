@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"openflux/utils"
+
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -48,6 +50,8 @@ func init() {
 }
 
 // frameBatch concatenates packets into length-prefixed records.
+// Packets larger than 65535 bytes cannot be represented in the 2-byte
+// length prefix; the caller must not pass them (see encodeBatch).
 func frameBatch(pkts [][]byte) []byte {
 	total := 0
 	for _, p := range pkts {
@@ -63,9 +67,29 @@ func frameBatch(pkts [][]byte) []byte {
 	return out
 }
 
+// maxPacketLen is the largest packet the 2-byte length prefix can represent.
+const maxPacketLen = 0xFFFF
+
 // encodeBatch serializes packets into a single wire frame, compressing the
-// whole batch with zstd only when that actually shrinks it.
+// whole batch with zstd only when that actually shrinks it. Oversized packets
+// (> 65535 bytes) would silently corrupt the frame (uint16 length wraps), so
+// they are dropped with a debug log instead; tunnel TCP retransmits.
+// Returns nil only when input packets were all dropped as oversized (the
+// caller should skip the send); a genuinely empty input keeps the old
+// behavior of a valid empty frame.
 func encodeBatch(pkts [][]byte) []byte {
+	original := len(pkts)
+	for i := 0; i < len(pkts); {
+		if len(pkts[i]) > maxPacketLen {
+			utils.Debugf("[BATCH] dropping oversized packet (%d bytes, max %d)", len(pkts[i]), maxPacketLen)
+			pkts = append(pkts[:i], pkts[i+1:]...)
+			continue
+		}
+		i++
+	}
+	if len(pkts) == 0 && original > 0 {
+		return nil
+	}
 	framed := frameBatch(pkts)
 	compressed := zstdEnc.EncodeAll(framed, nil)
 

@@ -96,37 +96,84 @@ func (s *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	}()
 	defer clientConn.Close()
 
-	buf := make([]byte, 256)
-	n, err := clientConn.Read(buf)
-	if err != nil || n < 2 || buf[0] != 0x05 {
+	// Greeting: VER(1) NMETHODS(1) METHODS(NMETHODS). TCP may deliver the
+	// request in fragments, so read exactly what the header announces instead
+	// of trusting a single Read.
+	var hdr [2]byte
+	if _, err := io.ReadFull(clientConn, hdr[:]); err != nil {
+		return
+	}
+	if hdr[0] != 0x05 || hdr[1] == 0 {
+		return
+	}
+	methods := make([]byte, hdr[1])
+	if _, err := io.ReadFull(clientConn, methods); err != nil {
+		return
+	}
+	// No client auth: always reply "no acceptable methods" (0xFF) unless the
+	// client offers NO-AUTH (0x00), which we accept.
+	acceptsNoAuth := false
+	for _, m := range methods {
+		if m == 0x00 {
+			acceptsNoAuth = true
+			break
+		}
+	}
+	if !acceptsNoAuth {
+		clientConn.Write([]byte{0x05, 0xFF})
+		return
+	}
+	if _, err := clientConn.Write([]byte{0x05, 0x00}); err != nil {
 		return
 	}
 
-	clientConn.Write([]byte{0x05, 0x00})
-
-	n, err = clientConn.Read(buf)
-	if err != nil || n < 10 || buf[1] != 0x01 {
+	// Request: VER(1) CMD(1) RSV(1) ATYP(1) ADDR VAR PORT(2).
+	var req [4]byte
+	if _, err := io.ReadFull(clientConn, req[:]); err != nil {
 		return
 	}
-
+	if req[0] != 0x05 || req[1] != 0x01 { // CONNECT only
+		socksReply(clientConn, 0x07) // command not supported
+		return
+	}
 	var targetAddr string
-	switch buf[3] {
-	case 0x01:
+	switch req[3] {
+	case 0x01: // IPv4
+		var addr [6]byte // 4 addr + 2 port
+		if _, err := io.ReadFull(clientConn, addr[:]); err != nil {
+			return
+		}
 		targetAddr = fmt.Sprintf("%d.%d.%d.%d:%d",
-			buf[4], buf[5], buf[6], buf[7],
-			uint16(buf[8])<<8|uint16(buf[9]))
-	case 0x03:
-		domainLen := int(buf[4])
-		// Bounds-check against what was actually read: address (domainLen
-		// bytes) starts at index 5 and is followed by a 2-byte port.
-		if domainLen == 0 || 5+domainLen+2 > n {
-			utils.Debugf("[SOCKS5] Bad domain request (len=%d, n=%d)", domainLen, n)
+			addr[0], addr[1], addr[2], addr[3],
+			uint16(addr[4])<<8|uint16(addr[5]))
+	case 0x03: // domain
+		var l [1]byte
+		if _, err := io.ReadFull(clientConn, l[:]); err != nil {
+			return
+		}
+		domainLen := int(l[0])
+		if domainLen == 0 {
+			utils.Debugf("[SOCKS5] Bad domain request (len=0)")
+			socksReply(clientConn, 0x01)
+			return
+		}
+		rest := make([]byte, domainLen+2) // domain + port
+		if _, err := io.ReadFull(clientConn, rest); err != nil {
 			return
 		}
 		targetAddr = fmt.Sprintf("%s:%d",
-			string(buf[5:5+domainLen]),
-			uint16(buf[5+domainLen])<<8|uint16(buf[6+domainLen]))
+			string(rest[:domainLen]),
+			uint16(rest[domainLen])<<8|uint16(rest[domainLen+1]))
+	case 0x04: // IPv6
+		var addr [18]byte // 16 addr + 2 port
+		if _, err := io.ReadFull(clientConn, addr[:]); err != nil {
+			return
+		}
+		ip := net.IP(addr[:16])
+		targetAddr = net.JoinHostPort(ip.String(),
+			fmt.Sprintf("%d", uint16(addr[16])<<8|uint16(addr[17])))
 	default:
+		socksReply(clientConn, 0x08) // address type not supported
 		return
 	}
 
@@ -135,12 +182,12 @@ func (s *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	targetConn, err := s.dialer.DialTCP(targetAddr)
 	if err != nil {
 		utils.Debugf("[SOCKS5] Dial failed: %v", err)
-		clientConn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+		socksReply(clientConn, 0x04) // host unreachable
 		return
 	}
 	defer targetConn.Close()
 
-	clientConn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	socksReply(clientConn, 0x00) // success
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -158,4 +205,9 @@ func (s *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	}()
 
 	wg.Wait()
+}
+
+// socksReply writes a minimal SOCKS5 reply with the given status code.
+func socksReply(conn net.Conn, code byte) {
+	conn.Write([]byte{0x05, code, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 }

@@ -67,7 +67,7 @@ func DefaultVolgaConfig() VolgaConfig {
 		MaxPayloadBytes: 5_000_000,
 		MinPayloadBytes: 200,
 
-		ReconnectMinDelay:   500 * time.Millisecond,
+		ReconnectMinDelay:   1500 * time.Millisecond,
 		ReconnectMaxDelay:   30 * time.Second,
 		ReconnectMultiplier: 1.5,
 
