@@ -29,6 +29,8 @@ case "$transport" in
     ;;
 esac
 
+set -- "--$role" --transport "$transport"
+
 # Exit-node mode: l4 (gVisor proxy, default) or l3 (raw SNAT/DNAT, Linux+NET_RAW).
 case "${MODE:-}" in
   "") ;;
@@ -50,8 +52,6 @@ case "${CODEC:-}" in
     exit 2
     ;;
 esac
-
-set -- "--$role" --transport "$transport"
 
 case "${MOBILE:-0}" in
   1|true|yes) set -- "$@" --mobile ;;
