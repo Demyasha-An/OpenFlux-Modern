@@ -310,6 +310,8 @@ DEPRECATED (removed in v2)
 	}
 
 	switch *transportType {
+        case "boards":
+    		inner = yandex.NewBoardsTransport(globalDocUrl, config)
 	case "vyandex":
 		vt := yandex.NewYandexVolgaTransport(globalDocUrl, config)
 		if *mobile {
