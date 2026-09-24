@@ -1,9 +1,11 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -210,16 +212,33 @@ func (t *TCPTunnel) setupClient(tunnelNIC tcpip.NICID) {
 }
 
 func (t *TCPTunnel) DialTCP(address string) (net.Conn, error) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", address)
+	host, portStr, err := net.SplitHostPort(address)
 	if err != nil {
-		return nil, fmt.Errorf("resolve: %w", err)
+		return nil, fmt.Errorf("bad address %q: %w", address, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("bad port in %q: %w", address, err)
 	}
 
-	ip := tcpAddr.IP.To4()
-	if ip == nil {
-		return nil, fmt.Errorf("IPv6 not supported")
+	// The tunnel is IPv4-only (10.10.10.2/24 on an ipv4 link endpoint), so
+	// resolve with an explicit "ip4" query instead of net.ResolveTCPAddr,
+	// which returns whatever the resolver lists first. On dual-stack hosts
+	// (github.com and friends) an AAAA-first answer used to fail the whole
+	// CONNECT with "IPv6 not supported" even though A records existed --
+	// pages that resolve remotely through SOCKS never loaded in browsers.
+	ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", host, err)
 	}
-	utils.Debugf("[TUNNEL] DialTCP %s -> %s:%d", address, ip.String(), tcpAddr.Port)
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IPv4 address for %s", host)
+	}
+	ip := ips[0].To4()
+	if ip == nil {
+		return nil, fmt.Errorf("no IPv4 address for %s", host)
+	}
+	utils.Debugf("[TUNNEL] DialTCP %s -> %s:%d", address, ip.String(), port)
 
 	nic := tcpip.NICID(1)
 	if t.isExitNode && false {
@@ -229,7 +248,7 @@ func (t *TCPTunnel) DialTCP(address string) (net.Conn, error) {
 	conn, err := gonet.DialTCP(t.gvisorStack, tcpip.FullAddress{
 		NIC:  nic,
 		Addr: tcpip.AddrFrom4([4]byte{ip[0], ip[1], ip[2], ip[3]}),
-		Port: uint16(tcpAddr.Port),
+		Port: uint16(port),
 	}, ipv4.ProtocolNumber)
 
 	return conn, err

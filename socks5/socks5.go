@@ -164,14 +164,13 @@ func (s *SOCKS5Server) handleConnection(clientConn net.Conn) {
 		targetAddr = fmt.Sprintf("%s:%d",
 			string(rest[:domainLen]),
 			uint16(rest[domainLen])<<8|uint16(rest[domainLen+1]))
-	case 0x04: // IPv6
-		var addr [18]byte // 16 addr + 2 port
-		if _, err := io.ReadFull(clientConn, addr[:]); err != nil {
-			return
-		}
-		ip := net.IP(addr[:16])
-		targetAddr = net.JoinHostPort(ip.String(),
-			fmt.Sprintf("%d", uint16(addr[16])<<8|uint16(addr[17])))
+	case 0x04: // IPv6 — the tunnel is IPv4-only; refuse cleanly so browsers
+		// fall back to the A record instead of stalling on a dead family.
+		var drain [18]byte
+		io.ReadFull(clientConn, drain[:])
+		utils.Debugf("[SOCKS5] IPv6 CONNECT refused (tunnel is IPv4-only): %s", net.IP(drain[:16]))
+		socksReply(clientConn, 0x08) // address type not supported
+		return
 	default:
 		socksReply(clientConn, 0x08) // address type not supported
 		return

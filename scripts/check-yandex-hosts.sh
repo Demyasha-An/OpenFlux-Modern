@@ -1,13 +1,19 @@
 #!/bin/bash
-# Check whether reachable Yandex anycast frontends also serve disk.yandex.ru
-# via SNI — lets --resolve reroute the doc host off the broken 87.250.250.0/24.
-check() {
-  ip=$1; host=$2
-  printf '%s via %s: ' "$host" "$ip"
-  subj=$(timeout 8 openssl s_client -connect "$ip:443" -servername "$host" </dev/null 2>/dev/null | openssl x509 -noout -subject 2>/dev/null)
-  if [ -n "$subj" ]; then echo "TLS-OK $subj"; else echo "TIMEOUT/FAIL"; fi
-}
-check 213.180.204.179 disk.yandex.ru
-check 77.88.21.171 disk.yandex.ru
-check 87.250.250.242 passport.yandex.ru
-check 87.250.250.113 ya.yandex.ru
+# Probe the doc URL through a specific Yandex frontend (IP + SNI + Host),
+# several times, to separate flaky L4 from a vhost that does not serve the doc.
+ip=$1
+host=$2
+path=$3
+for i in 1 2 3 4 5; do
+  printf 'try%s %s: ' "$i" "$ip"
+  out=$(timeout 10 openssl s_client -connect "$ip:443" -servername "$host" -quiet 2>/dev/null <<EOF | head -1
+GET $path HTTP/1.1
+Host: $host
+User-Agent: Mozilla/5.0
+Connection: close
+
+EOF
+)
+  if [ -n "$out" ]; then echo "$out"; else echo TIMEOUT/FAIL; fi
+  sleep 1
+done
