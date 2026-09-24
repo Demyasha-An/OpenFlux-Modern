@@ -1125,6 +1125,18 @@ func (w *wsListener) handleBundleItem(raw json.RawMessage) {
 			return
 		}
 		packets := decodeBatch(decoded)
+		// keep-alive probes (a single 0x00 byte) and other runt control
+		// frames are not tunnel packets: drop them here instead of feeding
+		// them to the batch decoder, which used to log a decode error every
+		// KeepAliveInterval and pollute the packet counters.
+		real := packets[:0]
+		for _, p := range packets {
+			if len(p) < 2 {
+				continue
+			}
+			real = append(real, p)
+		}
+		packets = real
 		w.stats.PacketsRecv.Add(uint64(len(packets)))
 		w.stats.BytesReceived.Add(uint64(len(decoded)))
 		for _, pkt := range packets {
