@@ -27,6 +27,11 @@ var (
 	maxToken     string
 	maxUid       string
 	localIP      string
+
+	// client-side knobs consumed by runClient (declared here so the flag
+	// values are reachable from the inbound dispatch)
+	dnsMode   string
+	socksAuth string
 )
 
 // expandShortFlags rewrites single-letter flag aliases into their long
@@ -105,7 +110,7 @@ func main() {
 
 	mobile := flag.Bool("mobile", false, "Mobile/4G profile: light relay workers+queues, small TCP buffers, DoT resolver (client side)")
 	mtu := flag.Uint("mtu", 1500, "Virtual NIC MTU (1280-9000). Lower to 1380 on LTE/GTP paths with PMTU blackholes")
-	resolve := flag.String("resolve", "", "Static hostname->IP overrides, curl --resolve style: \"host=ip,host=ip\". For networks with dead system DNS and blocked DoT (e.g. --resolve volga.yandex.ru=IP,push.yandex.ru=IP). Applies to vyandex.")
+	resolve := flag.String("resolve", "", "Static hostname->IP overrides, curl --resolve style: \"host=ip,host=ip\" (comma-separated IPs per host allowed; system DNS is the fallback). For networks with dead system DNS and blocked DoT. Applies to vyandex.")
 	encryptionKeyFile := flag.String("encryption-key-file", "",
 		"Optional: encrypt the transport with AES-256-GCM using a shared secret read from this file. "+
 			"Both peers must use the same secret; unset means unencrypted, unchanged behavior")
@@ -114,6 +119,8 @@ func main() {
 	flag.StringVar(&maxToken, "maxToken", "", "MAX Web token. If u use MAX transport")
 	flag.StringVar(&maxUid, "maxUid", "", "MAX call user id. If u use MAX transport")
 	socksAddr := flag.String("socks5", ":1080", "SOCKS5 address")
+	flag.StringVar(&socksAuth, "socks5-auth", "", "SOCKS5 username:password (RFC 1929). Required when --socks5 listens beyond loopback")
+	flag.StringVar(&dnsMode, "dns", "system", "Resolver for SOCKS5 target hostnames: system (default) or doh (DNS-over-HTTPS through this tunnel -- use it with INCY on a poisoned network)")
 	flag.StringVar(&localIP, "local-ip", "", "Egress IP for exit node (l3 mode only, scoped RST drop)")
 
 	benchBytes := flag.Int("bench-bytes", 0, "Benchmark: push this many MB through the transport, then report and exit")
@@ -463,6 +470,25 @@ func runClient(trans transport.Transport, inbound, socksAddr string, exitMode tu
 		log.Printf("Running as CLIENT (SOCKS5 on %s, legacy gVisor path)", socksAddr)
 		tun := tunnel.NewTCPTunnelMode(trans, false, exitMode)
 		socks5Server := socks5.NewSOCKS5Server(socksAddr, tun)
+		if socksAuth != "" {
+			user, pass, ok := strings.Cut(socksAuth, ":")
+			if !ok {
+				log.Fatalf("--socks5-auth: want user:password")
+			}
+			socks5Server.SetAuth(user, pass)
+			log.Printf("SOCKS5 auth: enabled (user %q)", user)
+		}
+		// DNS through the tunnel: SOCKS5 clients such as INCY hand us bare
+		// hostnames, and on a poisoned network the system resolver answers
+		// with reserved addresses. DoH-over-SOCKS keeps resolution at the exit.
+		switch dnsMode {
+		case "system":
+		case "doh":
+			tunnel.SetHostnameResolver(tunnel.NewTunnelDoHResolver(socksAddr, 0))
+			log.Printf("Resolver: DoH through tunnel (%s)", socksAddr)
+		default:
+			log.Fatalf("--dns: unknown value %q (want system|doh)", dnsMode)
+		}
 		log.Fatal(socks5Server.Start())
 	default:
 		log.Fatalf("--inbound: unknown value %q (want tun|socks5)", inbound)

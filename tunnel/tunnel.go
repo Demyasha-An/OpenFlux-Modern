@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -211,6 +212,43 @@ func (t *TCPTunnel) setupClient(tunnelNIC tcpip.NICID) {
 	})
 }
 
+// HostnameResolver resolves a hostname to IPv4 addresses. Returning an error
+// makes DialTCP fail fast, so implementations should fall back internally
+// rather than propagate transient upstream failures.
+type HostnameResolver interface {
+	LookupIPv4(ctx context.Context, host string) ([]net.IP, error)
+}
+
+var (
+	resolverMu sync.RWMutex
+	resolver   HostnameResolver
+)
+
+// SetHostnameResolver installs a custom resolver for SOCKS5 target hostnames
+// (nil restores the system resolver). Must be called before serving.
+func SetHostnameResolver(r HostnameResolver) {
+	resolverMu.Lock()
+	resolver = r
+	resolverMu.Unlock()
+}
+
+func resolveHostIPv4(host string) ([]net.IP, error) {
+	// Literal address: nothing to resolve.
+	if ip := net.ParseIP(host); ip != nil {
+		if v4 := ip.To4(); v4 != nil {
+			return []net.IP{v4}, nil
+		}
+		return nil, fmt.Errorf("IPv6 literal not supported: %s", host)
+	}
+	resolverMu.RLock()
+	r := resolver
+	resolverMu.RUnlock()
+	if r != nil {
+		return r.LookupIPv4(context.Background(), host)
+	}
+	return net.DefaultResolver.LookupIP(context.Background(), "ip4", host)
+}
+
 func (t *TCPTunnel) DialTCP(address string) (net.Conn, error) {
 	host, portStr, err := net.SplitHostPort(address)
 	if err != nil {
@@ -227,7 +265,12 @@ func (t *TCPTunnel) DialTCP(address string) (net.Conn, error) {
 	// (github.com and friends) an AAAA-first answer used to fail the whole
 	// CONNECT with "IPv6 not supported" even though A records existed --
 	// pages that resolve remotely through SOCKS never loaded in browsers.
-	ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", host)
+	//
+	// The resolver is pluggable (SetHostnameResolver): on a phone the system
+	// resolver is poisoned, and a SOCKS5 client (INCY) hands us bare
+	// hostnames, so the default is not an option there -- see
+	// NewTunnelDoHResolver, which resolves DoH through this very SOCKS5 port.
+	ips, err := resolveHostIPv4(host)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", host, err)
 	}

@@ -16,14 +16,32 @@ type Dialer interface {
 type SOCKS5Server struct {
 	listenAddr string
 	dialer     Dialer
+	auth       *socksAuth
 
 	mu       sync.Mutex
 	listener net.Listener
 	closed   bool
 }
 
+// socksAuth holds optional RFC 1929 username/password credentials.
+type socksAuth struct {
+	user string
+	pass string
+}
+
 func NewSOCKS5Server(addr string, dialer Dialer) *SOCKS5Server {
 	return &SOCKS5Server{listenAddr: addr, dialer: dialer}
+}
+
+// SetAuth enables username/password authentication (RFC 1929). Empty values
+// disable it. Use it whenever the listener is not loopback-only, e.g. when a
+// phone reaches the SOCKS5 port of a laptop acting as the tunnel client.
+func (s *SOCKS5Server) SetAuth(user, pass string) {
+	if user == "" {
+		s.auth = nil
+		return
+	}
+	s.auth = &socksAuth{user: user, pass: pass}
 }
 
 // Bind reserves the listen address so callers can detect "address already in
@@ -113,13 +131,24 @@ func (s *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	// No client auth: always reply "no acceptable methods" (0xFF) unless the
 	// client offers NO-AUTH (0x00), which we accept.
 	acceptsNoAuth := false
+	acceptsUserPass := false
 	for _, m := range methods {
-		if m == 0x00 {
+		switch m {
+		case 0x00:
 			acceptsNoAuth = true
-			break
+		case 0x02:
+			acceptsUserPass = true
 		}
 	}
-	if !acceptsNoAuth {
+	switch {
+	case s.auth != nil && acceptsUserPass:
+		// RFC 1929: VER(1) ULEN(1) UNAME PLEN(1) PASSWD
+		if err := s.checkUserPass(clientConn); err != nil {
+			return
+		}
+	case acceptsNoAuth && s.auth == nil:
+		// open proxy on loopback: fine
+	default:
 		clientConn.Write([]byte{0x05, 0xFF})
 		return
 	}
@@ -204,6 +233,36 @@ func (s *SOCKS5Server) handleConnection(clientConn net.Conn) {
 	}()
 
 	wg.Wait()
+}
+
+// checkUserPass performs the RFC 1929 username/password exchange.
+func (s *SOCKS5Server) checkUserPass(conn net.Conn) error {
+	var head [2]byte
+	if _, err := io.ReadFull(conn, head[:]); err != nil {
+		return err
+	}
+	if head[0] != 0x01 { // auth version
+		return fmt.Errorf("bad auth version %d", head[0])
+	}
+	user := make([]byte, head[1])
+	if _, err := io.ReadFull(conn, user); err != nil {
+		return err
+	}
+	var plen [1]byte
+	if _, err := io.ReadFull(conn, plen[:]); err != nil {
+		return err
+	}
+	pass := make([]byte, plen[0])
+	if _, err := io.ReadFull(conn, pass); err != nil {
+		return err
+	}
+	if string(user) != s.auth.user || string(pass) != s.auth.pass {
+		utils.Debugf("[SOCKS5] auth failed for user %q", string(user))
+		conn.Write([]byte{0x01, 0x01}) // status: failure
+		return fmt.Errorf("socks5 auth failed")
+	}
+	conn.Write([]byte{0x01, 0x00}) // status: success
+	return nil
 }
 
 // socksReply writes a minimal SOCKS5 reply with the given status code.
