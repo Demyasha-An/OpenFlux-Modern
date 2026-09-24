@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	godebug "runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -81,6 +82,16 @@ const (
 	codecBatched = "batched"
 	codecLegacy  = "legacy"
 )
+
+// sortedKeys returns map keys in a stable order (for deterministic logging).
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func main() {
 	fmt.Print("written by p1neappleXpress\n")
@@ -300,13 +311,34 @@ DEPRECATED (removed in v2)
 
 	if *resolve != "" {
 		staticHosts := map[string]string{}
+		lastHost := ""
 		for _, pair := range strings.Split(*resolve, ",") {
-			if host, ip, ok := strings.Cut(strings.TrimSpace(pair), "="); ok {
-				staticHosts[strings.TrimSpace(host)] = strings.TrimSpace(ip)
+			pair = strings.TrimSpace(pair)
+			if pair == "" {
+				continue
+			}
+			if host, ip, ok := strings.Cut(pair, "="); ok {
+				lastHost = strings.TrimSpace(host)
+				if lastHost != "" {
+					staticHosts[lastHost] = strings.TrimSpace(ip)
+				}
+				continue
+			}
+			// A bare token right after "host=ip" is another candidate IP for
+			// that host: --resolve "host=1.2.3.4,5.6.7.8".
+			if lastHost != "" {
+				if prev := staticHosts[lastHost]; prev != "" {
+					staticHosts[lastHost] = prev + "," + pair
+				} else {
+					staticHosts[lastHost] = pair
+				}
 			}
 		}
 		yandex.SetStaticHosts(staticHosts)
-		log.Printf("Static hosts: %d override(s)", len(staticHosts))
+		for _, h := range sortedKeys(staticHosts) {
+			log.Printf("Static host: %s -> %s", h, staticHosts[h])
+		}
+		log.Printf("Static hosts: %d override(s) (fallback: system DNS)", len(staticHosts))
 	}
 
 	switch *transportType {

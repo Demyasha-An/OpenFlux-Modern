@@ -104,12 +104,19 @@ var reClientConfig = regexp.MustCompile(`<script[^>]*id="client-config"[^>]*>(.*
 // transport deadlocks: relay POSTs queue up, WS can't dial, and even DoT
 // queries loop back into the (dead) tunnel. Set via SetStaticHosts before
 // Start; TLS SNI still uses the original hostname.
+//
+// The value may list several comma-separated IPs ("1.2.3.4,5.6.7.8"): they
+// are tried in order, and the system resolver is always used as the last
+// resort. Yandex anycast addresses move and single-VPS routes to them break
+// (observed: 87.250.250.0/24 unreachable from one provider, the same host
+// reachable from a phone), so a hard pin with no fallback is a time bomb.
 var (
 	staticHostsMu sync.RWMutex
 	staticHosts   = map[string]string{}
 )
 
 // SetStaticHosts installs hostname->IP overrides. Pass nil/empty to clear.
+// Values may be a single IP or a comma-separated candidate list.
 func SetStaticHosts(m map[string]string) {
 	staticHostsMu.Lock()
 	defer staticHostsMu.Unlock()
@@ -121,20 +128,78 @@ func SetStaticHosts(m map[string]string) {
 	}
 }
 
-// volgaDialContext is an http.Transport/websocket dialer that rewrites
-// known hosts to static IPs without touching TLS ServerName (it stays
-// derived from the request URL host).
+const (
+	volgaDialTimeout    = 10 * time.Second
+	volgaDialIPTimeout  = 6 * time.Second
+	volgaDialMaxCandIPs = 4
+)
+
+// volgaDialContext is an http.Transport/websocket dialer that rewrites known
+// hosts to static IPs without touching TLS ServerName (it stays derived from
+// the request URL host). Every candidate is tried in turn: the static list
+// first, then system DNS (IPv4 preferred — the tunnel is IPv4-only, and on
+// dual-stack hosts an AAAA-first answer used to break connections).
 func volgaDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	if host, port, err := net.SplitHostPort(addr); err == nil {
-		staticHostsMu.RLock()
-		ip, ok := staticHosts[host]
-		staticHostsMu.RUnlock()
-		if ok {
-			addr = net.JoinHostPort(ip, port)
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return volgaDial(ctx, network, addr, volgaDialTimeout)
+	}
+
+	var candidates []string
+	seen := map[string]bool{}
+	add := func(ip string) {
+		if v4 := net.ParseIP(ip).To4(); v4 != nil && !seen[v4.String()] {
+			seen[v4.String()] = true
+			candidates = append(candidates, net.JoinHostPort(v4.String(), port))
 		}
 	}
+
+	staticHostsMu.RLock()
+	staticIP := staticHosts[host]
+	staticHostsMu.RUnlock()
+	for _, ip := range strings.Split(staticIP, ",") {
+		add(strings.TrimSpace(ip))
+	}
+
+	// System DNS as a fallback: either the host has no static entry, or every
+	// static candidate failed (rotated/blackholed Yandex anycast IP).
+	if addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host); err == nil {
+		for _, a := range addrs {
+			add(a.IP.String())
+		}
+	}
+
+	if len(candidates) == 0 {
+		// No usable IPv4 (e.g. IPv6-only host): let the dialer decide.
+		return volgaDial(ctx, network, addr, volgaDialTimeout)
+	}
+	if len(candidates) > volgaDialMaxCandIPs {
+		candidates = candidates[:volgaDialMaxCandIPs]
+	}
+
+	var lastErr error
+	for _, c := range candidates {
+		conn, err := volgaDial(ctx, network, c, volgaDialIPTimeout)
+		if err == nil {
+			if c != net.JoinHostPort(host, port) {
+				utils.Debugf("[VOLGA] dial %s via %s", host, c)
+			}
+			return conn, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no reachable address for %s", host)
+	}
+	return nil, lastErr
+}
+
+func volgaDial(ctx context.Context, network, addr string, timeout time.Duration) (net.Conn, error) {
 	return (&net.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   timeout,
 		KeepAlive: 30 * time.Second,
 	}).DialContext(ctx, network, addr)
 }
