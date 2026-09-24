@@ -50,6 +50,7 @@ services:
       LOCAL_IP: ${EXIT_LOCAL_IP:-}
       MOBILE: ${MOBILE:-0}
       MTU: ${MTU:-}
+      RESOLVE: ${RESOLVE:-}
       MODE: ${MODE:-l4}
       CODEC: ${CODEC:-}
       DEBUG: ${DEBUG:-0}
