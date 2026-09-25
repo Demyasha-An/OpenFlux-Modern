@@ -24,7 +24,7 @@ Get-ChildItem "$root\app\src" -Recurse -Directory -ErrorAction SilentlyContinue 
     ForEach-Object { if (-not (Get-ChildItem $_.FullName -Force)) { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue } }
 
 # 2) rewrite references in text files
-$files = Get-ChildItem $root -Recurse -Include *.kt,*.java,*.xml,*.kts,*.pro -File
+$files = Get-ChildItem $root -Recurse -Include *.kt,*.java,*.xml,*.kts,*.pro,*.aidl -File
 $changed = 0
 foreach ($f in $files) {
     $text = Get-Content $f.FullName -Raw

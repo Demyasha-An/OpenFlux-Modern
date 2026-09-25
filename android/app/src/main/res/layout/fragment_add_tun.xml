@@ -362,7 +362,7 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Static IP overrides (--resolve) -->
+        <!-- Static IP overrides (resolve flag) -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/resolveContainer"
             android:layout_width="match_parent"
@@ -376,8 +376,6 @@
             app:boxStrokeColor="#2A3240"
             app:boxStrokeWidth="1dp"
             app:boxStrokeWidthFocused="1dp"
-            app:hint="@string/static_resolve"
-            app:helperText="@string/static_resolve_helper"
             app:hintTextColor="#98A0AE">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -394,7 +392,7 @@
 
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- MTU -->
+        <!-- MTU override -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/mtuContainer"
             android:layout_width="match_parent"
@@ -408,8 +406,6 @@
             app:boxStrokeColor="#2A3240"
             app:boxStrokeWidth="1dp"
             app:boxStrokeWidthFocused="1dp"
-            app:hint="@string/mtu_value"
-            app:helperText="@string/mtu_helper"
             app:hintTextColor="#98A0AE">
 
             <com.google.android.material.textfield.TextInputEditText

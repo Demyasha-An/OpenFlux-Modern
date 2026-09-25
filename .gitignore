@@ -64,3 +64,7 @@ watch_stats.sh
 *.log
 openflux
 *.bak
+
+# Decompiled third-party app used only as a reference; not part of this project.
+HAPP_sourde/
+HAPP_sourde.rar
