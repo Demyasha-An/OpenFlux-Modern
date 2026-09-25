@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Base solid -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#080B12" />
+        </shape>
+    </item>
+
+    <!-- Top soft glow — very wide, very faint -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.5"
+                android:centerY="0.30"
+                android:gradientRadius="900dp"
+                android:startColor="#144F7CFF"
+                android:centerColor="#084F7CFF"
+                android:endColor="#00080B12"
+                android:tileMode="clamp" />
+        </shape>
+    </item>
+
+    <!-- Bottom subtle wash — different hue, extremely faint -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.5"
+                android:centerY="0.95"
+                android:gradientRadius="700dp"
+                android:startColor="#0A7C4FFF"
+                android:centerColor="#047C4FFF"
+                android:endColor="#00080B12"
+                android:tileMode="clamp" />
+        </shape>
+    </item>
+
+</layer-list>

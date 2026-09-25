@@ -1,0 +1,560 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#090C15"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="32dp">
+
+        <!-- Tunnel Name -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/nameContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:boxBackgroundColor="#141924"
+            app:boxCornerRadiusBottomEnd="18dp"
+            app:boxCornerRadiusBottomStart="18dp"
+            app:boxCornerRadiusTopEnd="18dp"
+            app:boxCornerRadiusTopStart="18dp"
+            app:boxStrokeColor="#2A3240"
+            app:boxStrokeWidth="1dp"
+            app:boxStrokeWidthFocused="1dp"
+            app:hintTextColor="#98A0AE">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/name"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:hint="@string/tunnel_name"
+                android:paddingHorizontal="16dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#98A0AE"
+                android:inputType="textCapSentences|textNoSuggestions"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:imeOptions="actionNext" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Transport Type Selector -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/transportSelector"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardBackgroundColor="#141924"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#2A3240"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:id="@+id/select_transport_layout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/select_transport"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/selectedTransport"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="#98A0AE"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_chev_right"
+                    app:tint="#4F7CFF"
+                    tools:tint="#4F7CFF" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- URL-based Transport Fields (hint and helper depend on the transport) -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/urlContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:boxBackgroundColor="#141924"
+            app:boxCornerRadiusBottomEnd="18dp"
+            app:boxCornerRadiusBottomStart="18dp"
+            app:boxCornerRadiusTopEnd="18dp"
+            app:boxCornerRadiusTopStart="18dp"
+            app:boxStrokeColor="#2A3240"
+            app:boxStrokeWidth="1dp"
+            app:boxStrokeWidthFocused="1dp"
+            app:helperTextTextColor="#98A0AE"
+            app:hintTextColor="#98A0AE">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/documentUrl"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:paddingHorizontal="16dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#98A0AE"
+                android:inputType="textUri|textNoSuggestions"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:imeOptions="actionNext" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- MAX Transport Fields -->
+        <LinearLayout
+            android:id="@+id/maxContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:boxBackgroundColor="#141924"
+                app:boxCornerRadiusBottomEnd="18dp"
+                app:boxCornerRadiusBottomStart="18dp"
+                app:boxCornerRadiusTopEnd="18dp"
+                app:boxCornerRadiusTopStart="18dp"
+                app:boxStrokeColor="#2A3240">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/maxToken"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:hint="@string/max_token"
+                    android:paddingHorizontal="16dp"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#98A0AE"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:imeOptions="actionNext"
+                    android:importantForAutofill="no" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:boxBackgroundColor="#141924"
+                app:boxCornerRadiusBottomEnd="18dp"
+                app:boxCornerRadiusBottomStart="18dp"
+                app:boxCornerRadiusTopEnd="18dp"
+                app:boxCornerRadiusTopStart="18dp"
+                app:boxStrokeColor="#2A3240">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/maxUserId"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:hint="@string/max_uid"
+                    android:paddingHorizontal="16dp"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#98A0AE"
+                    android:inputType="number"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:imeOptions="actionNext" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
+
+        <!-- Encryption Key -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/encryptionKeyContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:boxBackgroundColor="#141924"
+            app:boxCornerRadiusBottomEnd="18dp"
+            app:boxCornerRadiusBottomStart="18dp"
+            app:boxCornerRadiusTopEnd="18dp"
+            app:boxCornerRadiusTopStart="18dp"
+            app:boxStrokeColor="#2A3240"
+            app:boxStrokeWidth="1dp"
+            app:boxStrokeWidthFocused="1dp"
+            app:endIconMode="password_toggle"
+            app:endIconTint="#98A0AE"
+            app:helperText="@string/encryption_key_helper"
+            app:helperTextTextColor="#98A0AE"
+            app:hintTextColor="#98A0AE">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/encryptionKey"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:hint="@string/encryption_key"
+                android:paddingHorizontal="16dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#98A0AE"
+                android:inputType="textPassword|textNoSuggestions"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:imeOptions="actionDone"
+                android:importantForAutofill="no" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:id="@+id/cupsEncryptionWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:paddingHorizontal="16dp"
+            android:text="@string/cupsonline_encryption_warning"
+            android:textColor="#FBBF24"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Legacy Codec Toggle -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/codecSelector"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="72dp"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardBackgroundColor="#141924"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#2A3240"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="72dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/legacy_codec"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/selectedCodec"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/legacy_codec_off"
+                        android:textColor="#98A0AE"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/codecSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    app:thumbTint="#4F7CFF"
+                    app:trackTint="#334F7CFF"
+                    app:useMaterialThemeColors="false" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Debug Mode Toggle -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/debugSelector"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardBackgroundColor="#141924"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#2A3240"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/debug_mode"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/selectedDebug"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/off"
+                        android:textColor="#98A0AE"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/debugSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    app:thumbTint="#4F7CFF"
+                    app:trackTint="#334F7CFF"
+                    app:useMaterialThemeColors="false" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Static IP overrides (--resolve) -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/resolveContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:boxBackgroundColor="#141924"
+            app:boxCornerRadiusBottomEnd="18dp"
+            app:boxCornerRadiusBottomStart="18dp"
+            app:boxCornerRadiusTopEnd="18dp"
+            app:boxCornerRadiusTopStart="18dp"
+            app:boxStrokeColor="#2A3240"
+            app:boxStrokeWidth="1dp"
+            app:boxStrokeWidthFocused="1dp"
+            app:hint="@string/static_resolve"
+            app:helperText="@string/static_resolve_helper"
+            app:hintTextColor="#98A0AE">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/staticResolve"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:hint="@string/static_resolve_hint"
+                android:paddingHorizontal="16dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#98A0AE"
+                android:inputType="textNoSuggestions"
+                android:maxLines="2"
+                android:textSize="13sp" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- MTU -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/mtuContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:boxBackgroundColor="#141924"
+            app:boxCornerRadiusBottomEnd="18dp"
+            app:boxCornerRadiusBottomStart="18dp"
+            app:boxCornerRadiusTopEnd="18dp"
+            app:boxCornerRadiusTopStart="18dp"
+            app:boxStrokeColor="#2A3240"
+            app:boxStrokeWidth="1dp"
+            app:boxStrokeWidthFocused="1dp"
+            app:hint="@string/mtu_value"
+            app:helperText="@string/mtu_helper"
+            app:hintTextColor="#98A0AE">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/mtu"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:hint="1500"
+                android:paddingHorizontal="16dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#98A0AE"
+                android:inputType="number"
+                android:maxLines="1"
+                android:singleLine="true" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Mobile profile toggle -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/mobileSelector"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardBackgroundColor="#141924"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#2A3240"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/mobile_profile"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/selectedMobile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/off"
+                        android:textColor="#98A0AE"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobileSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    app:thumbTint="#4F7CFF"
+                    app:trackTint="#334F7CFF"
+                    app:useMaterialThemeColors="false" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- DoH-through-tunnel toggle -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/dohSelector"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardBackgroundColor="#141924"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#2A3240"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/doh_resolver"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/selectedDoh"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/off"
+                        android:textColor="#98A0AE"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/dohSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    app:thumbTint="#4F7CFF"
+                    app:trackTint="#334F7CFF"
+                    app:useMaterialThemeColors="false" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Save Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/saveButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#334F7CFF"
+            android:text="@string/save"
+            android:textAllCaps="false"
+            android:textColor="#fff"
+            android:textSize="15sp"
+            app:cornerRadius="18dp" />
+
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>

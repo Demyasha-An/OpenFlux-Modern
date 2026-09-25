@@ -1,0 +1,72 @@
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#090d16">
+
+    <FrameLayout
+        android:id="@+id/h"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@drawable/log_container_border"
+        app:layout_constraintBottom_toTopOf="@id/log_actions"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ScrollView
+            android:id="@+id/log_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <TextView
+                android:id="@+id/logs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="1.5dp"
+                android:padding="12dp"
+                android:textColor="#b0b0b0"
+                android:textSize="11sp" />
+        </ScrollView>
+    </FrameLayout>
+
+    <!-- Bottom actions -->
+    <LinearLayout
+        android:id="@+id/log_actions"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:background="#0d1421"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        >
+
+        <TextView
+            android:id="@+id/btn_clear"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:letterSpacing="0.1"
+            android:text="CLEAR"
+            android:textColor="#ff4444"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="20dp"
+            android:background="#1a2332" />
+
+        <TextView
+            android:id="@+id/btn_autoscroll"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="AUTO-SCROLL"
+            android:textColor="#00ff88"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

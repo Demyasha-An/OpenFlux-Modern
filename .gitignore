@@ -7,8 +7,10 @@ github_output/
 *.dylib
 universal-bypass-tool
 universal-bypass-tool-*
-app
-app.exe
+# Compiled client binaries at the repo root only ("app" as a bare pattern would
+# also swallow the android/app Gradle module).
+/app
+/app.exe
 
 capture.txt
 capture.etl

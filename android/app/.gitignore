@@ -1,0 +1,5 @@
+/build
+# Built per-ABI Go client binaries (produced by scripts/build-apk.ps1).
+/jniLibs
+# local.properties points at the developer's SDK path.
+local.properties
