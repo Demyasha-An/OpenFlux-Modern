@@ -1,0 +1,21 @@
+{
+  "exportedFrom": "io.github.demyasha.openflux",
+  "selectedTunnelId": 2453256891878895601,
+  "tunnels": [
+    {
+      "id": 2453256891878895601,
+      "name": "Test",
+      "transportType": "vyandex",
+      "encryptionKey": null,
+      "args": [
+        "--role", "client",
+        "--transport", "vyandex",
+        "--url", "https://disk.yandex.ru/i/RyldS7an2uECIg",
+        "--debug",
+        "--mobile",
+        "--resolve", "volga.yandex.ru=77.88.21.171,push.yandex.ru=213.180.204.179,disk.yandex.ru=87.250.250.50,docs.yandex.ru=87.250.250.50",
+        "--dns", "doh"
+      ]
+    }
+  ]
+}

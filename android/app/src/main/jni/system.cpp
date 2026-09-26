@@ -17,13 +17,13 @@
 #define LOGE(...) do { __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__); } while(0)
 
 extern "C" void
-Java_io_github_p1neapplexpress_openflux_NativeBridge_jniclose(
+Java_io_github_demyasha_openflux_NativeBridge_jniclose(
         JNIEnv *env, jobject thiz, jint fd) {
     close(fd);
 }
 
 extern "C" jint
-Java_io_github_p1neapplexpress_openflux_NativeBridge_sendfd(
+Java_io_github_demyasha_openflux_NativeBridge_sendfd(
         JNIEnv *env, jobject thiz, jint tun_fd, jstring sock) {
     int fd;
     struct sockaddr_un addr;
@@ -62,15 +62,15 @@ Java_io_github_p1neapplexpress_openflux_NativeBridge_sendfd(
 }
 
 // NativeBridge lives in the root package
-// io.github.p1neapplexpress.openflux (no `native` subpackage).
+// io.github.demyasha.openflux (no `native` subpackage).
 static const char *classPathName =
-        "io/github/p1neapplexpress/openflux/NativeBridge";
+        "io/github/demyasha/openflux/NativeBridge";
 
 static JNINativeMethod method_table[] = {
         { "jniclose", "(I)V",
-                (void*) Java_io_github_p1neapplexpress_openflux_NativeBridge_jniclose },
+                (void*) Java_io_github_demyasha_openflux_NativeBridge_jniclose },
         { "sendfd", "(ILjava/lang/String;)I",
-                (void*) Java_io_github_p1neapplexpress_openflux_NativeBridge_sendfd }
+                (void*) Java_io_github_demyasha_openflux_NativeBridge_sendfd }
 };
 
 static int registerNativeMethods(JNIEnv* env, const char* className,

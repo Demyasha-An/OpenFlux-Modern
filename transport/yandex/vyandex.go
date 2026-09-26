@@ -1264,13 +1264,40 @@ func (t *YandexVolgaTransport) reauthorize() {
 	if !t.reauthMu.TryLock() {
 		return
 	}
+	t.reauthorizeLocked()
+}
+
+// reauthorizeLocked is reauthorize with reauthMu already held by the caller.
+// It retries with backoff: the usual cause of a failed refresh is a briefly
+// unreachable doc host, and one failed attempt would leave the tunnel dead
+// until the next 401 streak happens to line up with a working route.
+func (t *YandexVolgaTransport) reauthorizeLocked() {
 	defer t.reauthMu.Unlock()
 
 	if !t.IsRunning() {
 		return
 	}
 	utils.Debugf("[VOLGA] reauthorizing...")
-	auth, err := authorize(t.docURL)
+
+	var auth *volgaAuth
+	var err error
+	for i, delay := range reauthRetryDelays {
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-t.keepAliveStop:
+				return
+			}
+		}
+		if !t.IsRunning() {
+			return
+		}
+		auth, err = authorize(t.docURL)
+		if err == nil {
+			break
+		}
+		utils.Debugf("[VOLGA] reauthorize attempt %d/%d failed: %v", i+1, len(reauthRetryDelays), err)
+	}
 	if err != nil {
 		utils.Debugf("[VOLGA] reauthorize failed: %v", err)
 		t.SetConnected(false)
@@ -1339,9 +1366,23 @@ func (t *YandexVolgaTransport) Stats() transport.TransportStats {
 	}
 }
 
+// proactiveRefresh re-authorizes the session well before Yandex expires it.
+// Observed: a session left alone dies after ~13h, after which the relay
+// answers 401 forever. Re-auth only helps if disk.yandex.ru is reachable at
+// that moment, and on some VPS networks it is not (flapping route), so the
+// tunnel can stay dead for a long time. Refreshing on a timer while the link
+// is known-good keeps the session alive and turns a possible multi-hour
+// outage into a refresh that fails once and retries on the next tick.
+const proactiveRefresh = 20 * time.Minute
+
+// reauthRetryDelays are the backoff steps used inside reauthorize when the
+// doc host is briefly unreachable.
+var reauthRetryDelays = []time.Duration{0, 5 * time.Second, 15 * time.Second, 30 * time.Second}
+
 func (t *YandexVolgaTransport) keepAliveLoop() {
 	ticker := time.NewTicker(t.config.KeepAliveInterval)
 	defer ticker.Stop()
+	refreshIn := proactiveRefresh
 
 	for {
 		select {
@@ -1352,6 +1393,17 @@ func (t *YandexVolgaTransport) keepAliveLoop() {
 				return
 			}
 			_ = t.relay.Send([]byte{0x00})
+
+			refreshIn -= t.config.KeepAliveInterval
+			if refreshIn <= 0 {
+				if t.reauthMu.TryLock() {
+					utils.Debugf("[VOLGA] proactive session refresh")
+					t.authFailCount.Store(0)
+					go t.reauthorizeLocked()
+					refreshIn = proactiveRefresh
+				}
+				// If a reauth is already in flight, retry on the next tick.
+			}
 		}
 	}
 }
